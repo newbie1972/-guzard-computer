@@ -1,8 +1,8 @@
 /**
- * [v1.29 건블레이드 대쉬 탄약 버그 수정 및 최종 고정 버전]
+ * [v1.30 Full Screen - 화면 꽉 차게 만들기 버전]
  */
 
-let x = 100, y = 300, velocity = 0, gravity = 0.8;
+let x, y, velocity = 0, gravity = 0.8;
 let jumpCount = 0, maxJumpCount = 2;
 let mana = 100, maxMana = 100, manaRegen = 0.2;
 
@@ -19,14 +19,30 @@ let isReloading = false, reloadTimer = 0, fireTimer = 0;
 let adsMode = false, adsScale = 1, bladeExtension = 0;
 let aimX = 0, aimY = 0;
 
-let enemyX = 600, enemyY = 300, enemyHealth = 200, maxEnemyHealth = 200;
+let enemyX, enemyY, enemyHealth = 200, maxEnemyHealth = 200;
 let enemyAlive = true, respawnTimer = 0, enemyFlash = 0;
 let bullets = [], damageTexts = []; 
 
 function setup() { 
-  createCanvas(800, 400); 
+  // [수정] 브라우저 창 크기에 맞게 캔버스 생성
+  createCanvas(windowWidth, windowHeight); 
+  
+  // 초기 위치 설정 (바닥 기준)
+  x = 100;
+  y = height - 100;
+  enemyX = width - 200;
+  enemyY = height - 100;
+  
   noCursor(); 
   document.oncontextmenu = () => false;
+}
+
+// [추가] 브라우저 창 크기가 변할 때 게임 크기도 자동 조절
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  y = height - 100; // 바닥 위치 재조정
+  enemyY = height - 100;
+  enemyX = constrain(enemyX, 0, width); // 적이 화면 밖으로 나가지 않게
 }
 
 function draw() {
@@ -66,10 +82,18 @@ function updateLogic() {
   }
 
   if (keyIsDown(65)) x -= 5; if (keyIsDown(68)) x += 5;
+  
+  // [수정] 바닥 충돌 로직을 height 기준으로 변경
   y += velocity; velocity += gravity;
-  if (y > 300) { y = 300; velocity = 0; jumpCount = 0; }
+  if (y > height - 100) { y = height - 100; velocity = 0; jumpCount = 0; }
+  
   if (fireTimer > 0) fireTimer--;
-  if (!enemyAlive && ++respawnTimer > 100) { enemyAlive = true; enemyHealth = maxEnemyHealth; respawnTimer = 0; }
+  if (!enemyAlive && ++respawnTimer > 100) { 
+    enemyAlive = true; 
+    enemyHealth = maxEnemyHealth; 
+    respawnTimer = 0; 
+    enemyX = width - 200; // 리스폰 위치 화면 끝으로
+  }
 
   for (let i = damageTexts.length - 1; i >= 0; i--) {
     damageTexts[i].y -= 1;
@@ -81,8 +105,14 @@ function updateLogic() {
 function renderGame() {
   background(220);
   if (adsMode && weaponMode !== 4) drawADSEffect();
+  
   push();
+  // 정조준 시 화면 중앙을 기준으로 확대
   translate(width / 2, height / 2); scale(adsScale); translate(-width / 2, -height / 2);
+  
+  // 바닥 그리기
+  stroke(100); strokeWeight(2); line(0, height-60, width, height-60);
+  
   if (enemyAlive) drawEnemy();
   drawDamageTexts(); 
   updateAndDrawBullets();
@@ -91,6 +121,8 @@ function renderGame() {
   pop();
   drawUI();
 }
+
+// --- 아래 기능 함수들은 유지 및 좌표 최적화 ---
 
 function applyDamage(dmg) {
   enemyHealth -= dmg;
@@ -120,14 +152,14 @@ function drawUI() {
   push();
   fill(0); textSize(20); textStyle(BOLD);
   let name = (weaponMode === 5) ? "FIREBALL" : weapons[weaponMode].name;
-  text(name, 20, 30);
+  text(name, 20, 40);
   textSize(16); textStyle(NORMAL);
-  if (weaponMode < 5) text(`AMMO: ${weapons[weaponMode].ammo} / ${weapons[weaponMode].totalAmmo}`, 20, 55);
-  if (isReloading) fill(255,0,0), text("RELOADING...", 20, 80);
-  fill(50, 50, 50, 100); rect(20, 95, 150, 15);
-  fill(0, 150, 255); rect(20, 95, map(mana, 0, maxMana, 0, 150), 15);
+  if (weaponMode < 5) text(`AMMO: ${weapons[weaponMode].ammo} / ${weapons[weaponMode].totalAmmo}`, 20, 65);
+  if (isReloading) fill(255,0,0), text("RELOADING...", 20, 90);
+  fill(50, 50, 50, 100); rect(20, 105, 150, 15);
+  fill(0, 150, 255); rect(20, 105, map(mana, 0, maxMana, 0, 150), 15);
   fill(255); textSize(11); textAlign(CENTER, CENTER);
-  text(`${floor(mana)} / ${maxMana}`, 95, 102.5);
+  text(`${floor(mana)} / ${maxMana}`, 95, 112.5);
   pop();
 }
 
@@ -150,23 +182,14 @@ function drawWizard(wx, wy) {
 }
 
 function drawCrosshair() { push(); translate(aimX, aimY); noFill(); strokeWeight(2); if (weaponMode === 0) { stroke(0,200,255); ellipse(0,0,20,20); line(-10,-10,10,10); } else if (weaponMode === 1) { stroke(100); rect(-15,-15,30,30); } else if (weaponMode === 2) { stroke(255,0,0); line(-20,0,20,0); line(0,-20,0,20); point(0,0); } else if (weaponMode === 3) { stroke(0,200,0); arc(-10,0,15,25,HALF_PI,-HALF_PI); arc(10,0,15,25,-HALF_PI,HALF_PI); } else if (weaponMode === 4) { stroke(100,100,250); triangle(-10,5,0,-15,10,5); } else { stroke(255,100,0); ellipse(0,0,30,30); } pop(); }
-function updateAndDrawBullets() { for (let i = bullets.length - 1; i >= 0; i--) { let b = bullets[i]; b.x += b.vx; b.y += b.vy; let c = (b.type === 5) ? [255,100,0] : (weapons[b.type] ? weapons[b.type].bulletColor : 0); fill(c); noStroke(); circle(b.x, b.y, b.type === 5 ? 20 : 7); if (enemyAlive && dist(b.x, b.y, enemyX, enemyY) < 35) { let finalDmg = b.dmg; if (b.type === 2) { let d = dist(b.startX, b.startY, b.x, b.y); finalDmg = floor(map(constrain(d, 0, 700), 0, 700, 30, 100)); if (b.wasAds) finalDmg *= 2; } applyDamage(finalDmg); bullets.splice(i, 1); } else if (b.x < 0 || b.x > width || b.y < 0 || b.y > height) bullets.splice(i, 1); } }
+function updateAndDrawBullets() { for (let i = bullets.length - 1; i >= 0; i--) { let b = bullets[i]; b.x += b.vx; b.y += b.vy; let c = (b.type === 5) ? [255,100,0] : (weapons[b.type] ? weapons[b.type].bulletColor : 0); fill(c); noStroke(); circle(b.x, b.y, b.type === 5 ? 20 : 7); if (enemyAlive && dist(b.x, b.y, enemyX, enemyY) < 35) { let finalDmg = b.dmg; if (b.type === 2) { let d = dist(b.startX, b.startY, b.x, b.y); finalDmg = floor(map(constrain(d, 0, 700), 0, 700, 30, 100)); if (b.wasAds) finalDmg *= 2; } applyDamage(finalDmg); bullets.splice(i, 1); } else if (b.x < -100 || b.x > width + 100 || b.y < -100 || b.y > height + 100) bullets.splice(i, 1); } }
 function spawnBullet(spd, type, dmg, sz, spread = 0) { let targetX = (aimX - width/2) / adsScale + width/2; let targetY = (aimY - height/2) / adsScale + height/2; let angle = atan2(targetY - (y + 10), targetX - x) + spread; bullets.push({x:x, y:y+10, startX:x, startY:y+10, vx:cos(angle)*spd, vy:sin(angle)*spd, dmg:dmg, type:type, size:sz, wasAds:adsMode}); }
 function fireNormal() { spawnBullet(15, 0, 15, 8); weapons[0].ammo--; fireTimer=12; }
 function fireShotgun() { if (adsMode && weapons[1].ammo >= 2) { for(let i=0; i<10; i++) spawnBullet(random(10,14), 1, 18, 6, random(-0.3, 0.3)); weapons[1].ammo -= 2; } else if (weapons[1].ammo >= 1) { for(let i=0; i<5; i++) spawnBullet(random(10,13), 1, 20, 6, random(-0.2, 0.2)); weapons[1].ammo--; } fireTimer = 50; }
 function fireRifle() { spawnBullet(28, 2, 0, 8); weapons[2].ammo--; fireTimer=30; }
 function fireSMG(rate) { spawnBullet(18, 3, 6, 7); weapons[3].ammo--; fireTimer = rate; }
 function fireGunblade() { spawnBullet(20, 4, 5, 7); weapons[4].ammo--; fireTimer=8; }
-
-// [수정 완료] 칼총 대쉬 시 탄약 미소모
-function fireGunbladeDash() { 
-  let targetX = (aimX - width/2) / adsScale + width/2; let targetY = (aimY - height/2) / adsScale + height/2; 
-  let a = atan2(targetY - y, targetX - x); x += cos(a) * 150; y += sin(a) * 50; 
-  if (enemyAlive && dist(x, y, enemyX, enemyY) < 100) { applyDamage(40); } 
-  // weapons[4].ammo--;  <- 탄약 소모 줄 제거
-  fireTimer = 20; 
-}
-
+function fireGunbladeDash() { let targetX = (aimX - width/2) / adsScale + width/2; let targetY = (aimY - height/2) / adsScale + height/2; let a = atan2(targetY - y, targetX - x); x += cos(a) * 150; y += sin(a) * 50; if (enemyAlive && dist(x, y, enemyX, enemyY) < 100) { applyDamage(40); } fireTimer = 20; }
 function fireFireball() { mana -= 25; let targetX = (aimX - width/2) / adsScale + width/2; let targetY = (aimY - height/2) / adsScale + height/2; let a = atan2(targetY - y, targetX - x); bullets.push({x:x, y:y+10, vx:cos(a)*10, vy:sin(a)*10, dmg:80, type:5}); fireTimer=40; }
 function drawADSEffect() { push(); resetMatrix(); noFill(); for (let i = 0; i < 5; i++) { stroke(0, map(i, 0, 5, 60, 0)); strokeWeight(map(i, 0, 5, 100, 10)); rect(0, 0, width, height); } pop(); }
 function startReload() { isReloading = true; reloadTimer = 0; }
