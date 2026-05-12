@@ -1,5 +1,5 @@
 /**
- * [v1.30 Full Screen - 화면 꽉 차게 만들기 버전]
+ * [v1.31 정조준 확대 최적화 및 조준 버그 수정 버전]
  */
 
 let x, y, velocity = 0, gravity = 0.8;
@@ -24,25 +24,20 @@ let enemyAlive = true, respawnTimer = 0, enemyFlash = 0;
 let bullets = [], damageTexts = []; 
 
 function setup() { 
-  // [수정] 브라우저 창 크기에 맞게 캔버스 생성
   createCanvas(windowWidth, windowHeight); 
-  
-  // 초기 위치 설정 (바닥 기준)
   x = 100;
   y = height - 100;
   enemyX = width - 200;
   enemyY = height - 100;
-  
   noCursor(); 
   document.oncontextmenu = () => false;
 }
 
-// [추가] 브라우저 창 크기가 변할 때 게임 크기도 자동 조절
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  y = height - 100; // 바닥 위치 재조정
+  y = height - 100;
   enemyY = height - 100;
-  enemyX = constrain(enemyX, 0, width); // 적이 화면 밖으로 나가지 않게
+  enemyX = constrain(enemyX, 0, width);
 }
 
 function draw() {
@@ -55,7 +50,8 @@ function updateLogic() {
   let curFireRate = weapons[weaponMode] ? weapons[weaponMode].fireRate : 10;
   if (weaponMode === 3 && adsMode) curFireRate = 2; 
 
-  adsScale = lerp(adsScale, (adsMode && weaponMode !== 4) ? 1.2 : 1.0, 0.1);
+  // [수정] 정조준 확대 비율을 1.2에서 1.1로 낮춰 바닥이 잘 보이게 함
+  adsScale = lerp(adsScale, (adsMode && weaponMode !== 4) ? 1.1 : 1.0, 0.1);
   bladeExtension = lerp(bladeExtension, (weaponMode === 4 && adsMode) ? 45 : 0, 0.2);
 
   if (adsMode && enemyAlive && weaponMode !== 4) {
@@ -82,22 +78,17 @@ function updateLogic() {
   }
 
   if (keyIsDown(65)) x -= 5; if (keyIsDown(68)) x += 5;
-  
-  // [수정] 바닥 충돌 로직을 height 기준으로 변경
   y += velocity; velocity += gravity;
   if (y > height - 100) { y = height - 100; velocity = 0; jumpCount = 0; }
   
   if (fireTimer > 0) fireTimer--;
   if (!enemyAlive && ++respawnTimer > 100) { 
-    enemyAlive = true; 
-    enemyHealth = maxEnemyHealth; 
-    respawnTimer = 0; 
-    enemyX = width - 200; // 리스폰 위치 화면 끝으로
+    enemyAlive = true; enemyHealth = maxEnemyHealth; respawnTimer = 0; 
+    enemyX = width - 200;
   }
 
   for (let i = damageTexts.length - 1; i >= 0; i--) {
-    damageTexts[i].y -= 1;
-    damageTexts[i].life--;
+    damageTexts[i].y -= 1; damageTexts[i].life--;
     if (damageTexts[i].life <= 0) damageTexts.splice(i, 1);
   }
 }
@@ -107,11 +98,10 @@ function renderGame() {
   if (adsMode && weaponMode !== 4) drawADSEffect();
   
   push();
-  // 정조준 시 화면 중앙을 기준으로 확대
+  // 화면 중앙 기준 확대 로직
   translate(width / 2, height / 2); scale(adsScale); translate(-width / 2, -height / 2);
   
-  // 바닥 그리기
-  stroke(100); strokeWeight(2); line(0, height-60, width, height-60);
+  stroke(100); strokeWeight(2); line(-width, height-60, width*2, height-60); // 바닥 선 확장
   
   if (enemyAlive) drawEnemy();
   drawDamageTexts(); 
@@ -122,7 +112,20 @@ function renderGame() {
   drawUI();
 }
 
-// --- 아래 기능 함수들은 유지 및 좌표 최적화 ---
+// [핵심 수정] 확대된 좌표계에서도 마우스/에임을 정확히 계산하는 탄환 발사 로직
+function spawnBullet(spd, type, dmg, sz, spread = 0) { 
+  // 화면 중앙 기준으로 확대된 좌표를 월드 좌표로 역계산
+  let targetX = (aimX - width/2) / adsScale + width/2; 
+  let targetY = (aimY - height/2) / adsScale + height/2; 
+  
+  let angle = atan2(targetY - (y + 10), targetX - x) + spread; 
+  bullets.push({
+    x: x, y: y + 10, 
+    startX: x, startY: y + 10, 
+    vx: cos(angle) * spd, vy: sin(angle) * spd, 
+    dmg: dmg, type: type, size: sz, wasAds: adsMode
+  }); 
+}
 
 function applyDamage(dmg) {
   enemyHealth -= dmg;
@@ -168,9 +171,11 @@ function drawWizard(wx, wy) {
   fill(75, 0, 130); noStroke(); rect(wx-15, wy, 30, 40, 5); 
   fill(255, 224, 189); circle(wx, wy, 25); 
   fill(50, 0, 100); triangle(wx-20, wy-10, wx+20, wy-10, wx, wy-45); 
+  
   let targetX = (aimX - width/2) / adsScale + width/2;
   let targetY = (aimY - height/2) / adsScale + height/2;
   let angle = atan2(targetY - (wy + 10), targetX - wx);
+  
   translate(wx, wy + 10); rotate(angle);
   if (weaponMode === 0) { stroke(101, 67, 33); fill(139, 69, 19); rect(0,-2,45,4); fill(0,200,255); noStroke(); circle(45,0,8); } 
   else if (weaponMode === 1) { fill(60); rect(0,-5,35,10,2); fill(40); rect(0,-3,38,3); rect(0,0,38,3); } 
@@ -182,8 +187,7 @@ function drawWizard(wx, wy) {
 }
 
 function drawCrosshair() { push(); translate(aimX, aimY); noFill(); strokeWeight(2); if (weaponMode === 0) { stroke(0,200,255); ellipse(0,0,20,20); line(-10,-10,10,10); } else if (weaponMode === 1) { stroke(100); rect(-15,-15,30,30); } else if (weaponMode === 2) { stroke(255,0,0); line(-20,0,20,0); line(0,-20,0,20); point(0,0); } else if (weaponMode === 3) { stroke(0,200,0); arc(-10,0,15,25,HALF_PI,-HALF_PI); arc(10,0,15,25,-HALF_PI,HALF_PI); } else if (weaponMode === 4) { stroke(100,100,250); triangle(-10,5,0,-15,10,5); } else { stroke(255,100,0); ellipse(0,0,30,30); } pop(); }
-function updateAndDrawBullets() { for (let i = bullets.length - 1; i >= 0; i--) { let b = bullets[i]; b.x += b.vx; b.y += b.vy; let c = (b.type === 5) ? [255,100,0] : (weapons[b.type] ? weapons[b.type].bulletColor : 0); fill(c); noStroke(); circle(b.x, b.y, b.type === 5 ? 20 : 7); if (enemyAlive && dist(b.x, b.y, enemyX, enemyY) < 35) { let finalDmg = b.dmg; if (b.type === 2) { let d = dist(b.startX, b.startY, b.x, b.y); finalDmg = floor(map(constrain(d, 0, 700), 0, 700, 30, 100)); if (b.wasAds) finalDmg *= 2; } applyDamage(finalDmg); bullets.splice(i, 1); } else if (b.x < -100 || b.x > width + 100 || b.y < -100 || b.y > height + 100) bullets.splice(i, 1); } }
-function spawnBullet(spd, type, dmg, sz, spread = 0) { let targetX = (aimX - width/2) / adsScale + width/2; let targetY = (aimY - height/2) / adsScale + height/2; let angle = atan2(targetY - (y + 10), targetX - x) + spread; bullets.push({x:x, y:y+10, startX:x, startY:y+10, vx:cos(angle)*spd, vy:sin(angle)*spd, dmg:dmg, type:type, size:sz, wasAds:adsMode}); }
+function updateAndDrawBullets() { for (let i = bullets.length - 1; i >= 0; i--) { let b = bullets[i]; b.x += b.vx; b.y += b.vy; let c = (b.type === 5) ? [255,100,0] : (weapons[b.type] ? weapons[b.type].bulletColor : 0); fill(c); noStroke(); circle(b.x, b.y, b.type === 5 ? 20 : 7); if (enemyAlive && dist(b.x, b.y, enemyX, enemyY) < 35) { let finalDmg = b.dmg; if (b.type === 2) { let d = dist(b.startX, b.startY, b.x, b.y); finalDmg = floor(map(constrain(d, 0, 700), 0, 700, 30, 100)); if (b.wasAds) finalDmg *= 2; } applyDamage(finalDmg); bullets.splice(i, 1); } else if (b.x < -200 || b.x > width + 200 || b.y < -200 || b.y > height + 200) bullets.splice(i, 1); } }
 function fireNormal() { spawnBullet(15, 0, 15, 8); weapons[0].ammo--; fireTimer=12; }
 function fireShotgun() { if (adsMode && weapons[1].ammo >= 2) { for(let i=0; i<10; i++) spawnBullet(random(10,14), 1, 18, 6, random(-0.3, 0.3)); weapons[1].ammo -= 2; } else if (weapons[1].ammo >= 1) { for(let i=0; i<5; i++) spawnBullet(random(10,13), 1, 20, 6, random(-0.2, 0.2)); weapons[1].ammo--; } fireTimer = 50; }
 function fireRifle() { spawnBullet(28, 2, 0, 8); weapons[2].ammo--; fireTimer=30; }
